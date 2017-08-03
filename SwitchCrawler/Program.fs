@@ -165,11 +165,6 @@ let ``ノジマオンライン`` (driver: FirefoxDriver) =
     not (driver.FindElementByCssSelector(".hassoumeyasu2 > strong:nth-child(1) > strong:nth-child(2) > span:nth-child(1)").Text.Contains("完売御礼"))
 
 let ``楽天ブックスUrlList`` =
-    [
-        "http://ts.books.rakuten.co.jp/rb/14647221/";
-        "http://ts.books.rakuten.co.jp/rb/14647222/";
-        "http://ts.books.rakuten.co.jp/rb/14943334/";
-    ]
 
 let ``楽天ブックス`` (driver: FirefoxDriver) =
     not (driver.FindElementByCssSelector(".status").Text.Contains("ご注文できない商品*"))
@@ -252,8 +247,6 @@ type トイザらス(storeInfo: StoreInfo, dryRun: bool) =
                 else
                     Debug.WriteLine("Switch is NOT available.")
 
-let トイザらス = トイザらス(config.Stores.["トイザらス"], config.DryRun) :> 通販
-
 type ヨドバシ(storeInfo: StoreInfo, dryRun: bool) =
     let isAvailable (driver: RemoteWebDriver) =
         try
@@ -280,17 +273,39 @@ type ヨドバシ(storeInfo: StoreInfo, dryRun: bool) =
                 else
                     Debug.WriteLine("Switch is NOT available.")
 
-let ヨドバシ = ヨドバシ(config.Stores.["ヨドバシ.com"], config.DryRun) :> 通販
+type 楽天ブックス(storeInfo: StoreInfo, dryRun: bool) =
+    let isAvailable (driver: RemoteWebDriver) =
+        try
+            driver.FindElementByCssSelector(".new_addToCart") |> ignore
+            true
+        with
+        | _ -> false
+    
+    interface 通販 with
+        member this.Buy(driver) =
+            for url in storeInfo.Urls do
+                driver.Navigate().GoToUrl(url)
+                if isAvailable driver then
+                    driver.FindElementByCssSelector(".new_addToCart").Click()
+                    driver.FindElementByCssSelector("#js-cartBtn").Click()
+                    driver.FindElementByCssSelector("input[name='u']").SendKeys(storeInfo.Credential.Id)
+                    driver.FindElementByCssSelector("input[name='p']").SendKeys(storeInfo.Credential.Password)
+                    driver.FindElementByCssSelector("form#login_valid button[name='submit']").Click()
+                    if not dryRun then driver.FindElementByCssSelector("button[name='commit_order']").Click()
 
 let 通販TaskList =
     [
-        for 通販 in [トイザらス; ヨドバシ] do
-            let run () =
-                use driver = new ChromeDriver()
-                try
-                    通販.Buy(driver)
-                finally
-                    driver.Quit()
-            yield 通販Task(run)
+        トイザらス(config.Stores.["トイザらス"], config.DryRun) :> 通販
+        ヨドバシ(config.Stores.["ヨドバシ.com"], config.DryRun) :> 通販
+        楽天ブックス(config.Stores.["楽天ブックス"], config.DryRun) :> 通販
     ]
+    |> List.map begin fun 通販 ->
+        let run () =
+            use driver = new ChromeDriver()
+            try
+                通販.Buy(driver)
+            finally
+                driver.Quit()
+        通販Task(run)
+    end
     
