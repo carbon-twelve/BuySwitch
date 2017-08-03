@@ -54,17 +54,36 @@ type PaymentInfo = {} with
     }
 *)
 
-type Config = { Consumer: Consumer; AccessToken: AccessToken option; Credentials: Map<string, Credential> } with
+type StoreInfo = { Credential: Credential; Urls: string list } with
+    static member ToJson (s: StoreInfo) = json {
+        do! Json.write "credential" s.Credential
+        do! Json.write "urls" s.Urls
+    }
+    static member FromJson (_: StoreInfo) = json {
+        let! credential = Json.read "credential"
+        let! urls = Json.read "urls"
+        return { Credential = credential; Urls = urls }
+    }
+
+type Config =
+    {
+        Consumer: Consumer;
+        AccessToken: AccessToken option;
+        Stores: Map<string, StoreInfo>
+        DryRun: bool
+    } with
     static member ToJson (c: Config) = json {
         do! Json.write "consumer" c.Consumer
         do! Json.write "accessToken" c.AccessToken
-        do! Json.write "credentials" c.Credentials
+        do! Json.write "stores" c.Stores
+        do! Json.write "dryRun" c.DryRun
     }
     static member FromJson (_: Config) = json {
         let! consumer = Json.read "consumer"
         let! accessToken = Json.read "accessToken"
-        let! credentials = Json.read "credentials"
-        return { Consumer = consumer; AccessToken = accessToken; Credentials = credentials }
+        let! stores = Json.read "stores"
+        let! dryRun = Json.read "dryRun"
+        return { Consumer = consumer; AccessToken = accessToken; Stores = stores; DryRun = dryRun }
     }
 
 let config: Config =
@@ -89,15 +108,6 @@ let config: Config =
 
 
 (*
-let ``オムニセブンUrlList`` =
-    [
-        "http://iyec.omni7.jp/detail/4902370537338";
-        "http://iyec.omni7.jp/detail/4902370535709";
-        "http://iyec.omni7.jp/detail/4902370535716";
-        "http://7net.omni7.jp/detail/2110599526";
-        "http://7net.omni7.jp/detail/2110595636";
-        "http://7net.omni7.jp/detail/2110595637";
-    ]
 let ``オムニセブン`` (driver: FirefoxDriver) =
     driver.FindElementByCssSelector("input.js-pressTwice").Enabled
 
@@ -216,14 +226,7 @@ type 通販 =
 type 通販Task(run: unit -> unit) =
     member this.Run() = run()
 
-type トイザらス(credential: Credential, dryRun: bool) =
-    let urlList =
-        [
-            "https://www.toysrus.co.jp/s/dsg-580782400";
-            "https://www.toysrus.co.jp/s/dsg-572186500";
-            "https://www.toysrus.co.jp/s/dsg-572182200";
-        ]
-
+type トイザらス(storeInfo: StoreInfo, dryRun: bool) =
     let isAvailable (driver: RemoteWebDriver) =
         try
             driver.FindElementByCssSelector("#isStock_c").GetAttribute("hidden") <> null
@@ -232,14 +235,14 @@ type トイザらス(credential: Credential, dryRun: bool) =
 
     interface 通販 with
         member this.Buy(driver) =
-            for url in urlList do
+            for url in storeInfo.Urls do
                 driver.Navigate().GoToUrl(url)
                 if isAvailable driver then
                     try
                         Debug.WriteLine("Switch is available. Trying to buy...")
                         driver.FindElementByCssSelector(".quick-note > a:nth-child(1)").Click()
-                        driver.FindElementByCssSelector("input#mail").SendKeys(credential.Id)
-                        driver.FindElementByCssSelector("input#pw").SendKeys(credential.Password)
+                        driver.FindElementByCssSelector("input#mail").SendKeys(storeInfo.Credential.Id)
+                        driver.FindElementByCssSelector("input#pw").SendKeys(storeInfo.Credential.Password)
                         driver.FindElementByCssSelector(".exbutton").Click()
                         driver.Navigate().GoToUrl(url)
                         driver.FindElementByCssSelector("li.quick > button.exbutton").Click()
@@ -249,16 +252,9 @@ type トイザらス(credential: Credential, dryRun: bool) =
                 else
                     Debug.WriteLine("Switch is NOT available.")
 
-let トイザらス = トイザらス(config.Credentials.["トイザらス"], false) :> 通販
+let トイザらス = トイザらス(config.Stores.["トイザらス"], config.DryRun) :> 通販
 
-type ヨドバシ(credential: Credential, dryRun: bool) =
-    let urlList =
-        [
-            "http://www.yodobashi.com/product/100000001003570628/";
-            "http://www.yodobashi.com/product/100000001003431565/";
-            "http://www.yodobashi.com/product/100000001003431566/";
-        ]
-
+type ヨドバシ(storeInfo: StoreInfo, dryRun: bool) =
     let isAvailable (driver: RemoteWebDriver) =
         try
             driver.FindElementByCssSelector("#js_m_submitRelated") |> ignore
@@ -268,14 +264,14 @@ type ヨドバシ(credential: Credential, dryRun: bool) =
 
     interface 通販 with
         member this.Buy(driver) =
-            for url in urlList do
+            for url in storeInfo.Urls do
                 driver.Navigate().GoToUrl(url)
                 if isAvailable driver then
                     driver.FindElementByCssSelector("#js_m_submitRelated").Click()
                     driver.FindElementByCssSelector(".buyButton a[href='/yc/shoppingcart/index.html?next=true']").Click()
                     driver.FindElementByCssSelector(".checkout a").Click()
-                    driver.FindElementByCssSelector("input#memberId").SendKeys(credential.Id)
-                    driver.FindElementByCssSelector("input#password").SendKeys(credential.Password)
+                    driver.FindElementByCssSelector("input#memberId").SendKeys(storeInfo.Credential.Id)
+                    driver.FindElementByCssSelector("input#password").SendKeys(storeInfo.Credential.Password)
                     driver.FindElementByCssSelector("#js_i_login0").Click()
                     driver.FindElementByCssSelector("#sc_i_buy").Click()
                     driver.FindElementByCssSelector("#a04").Click()
@@ -284,7 +280,7 @@ type ヨドバシ(credential: Credential, dryRun: bool) =
                 else
                     Debug.WriteLine("Switch is NOT available.")
 
-let ヨドバシ = ヨドバシ(config.Credentials.["ヨドバシ.com"], false) :> 通販
+let ヨドバシ = ヨドバシ(config.Stores.["ヨドバシ.com"], config.DryRun) :> 通販
 
 let 通販TaskList =
     [
