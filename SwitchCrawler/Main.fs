@@ -11,8 +11,7 @@ let main argv =
     use timer =
         new Threading.Timer(
             begin fun stateInfo ->
-                通販TaskList
-                |> List.iter (fun task -> task.Run())
+                myNintendoStoreTask.Run()
             end,
             [],
             0,

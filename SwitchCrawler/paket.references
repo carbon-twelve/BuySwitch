@@ -3,3 +3,4 @@ CoreTweet
 Selenium.WebDriver
 Selenium.Firefox.WebDriver
 NUnit
+RestSharp

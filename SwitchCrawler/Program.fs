@@ -12,6 +12,8 @@ open Chiron.Mapping
 open Chiron
 open OpenQA.Selenium.Remote
 open OpenQA.Selenium.Chrome
+open RestSharp
+open System.Collections.Generic
 
 type AccessToken = { Token: string; Secret: string } with
     static member ToJson (a: AccessToken) = json {
@@ -67,23 +69,20 @@ type StoreInfo = { Credential: Credential; Urls: string list } with
 
 type Config =
     {
-        Consumer: Consumer;
-        AccessToken: AccessToken option;
         Stores: Map<string, StoreInfo>
         DryRun: bool
+        IftttKey: string
     } with
     static member ToJson (c: Config) = json {
-        do! Json.write "consumer" c.Consumer
-        do! Json.write "accessToken" c.AccessToken
         do! Json.write "stores" c.Stores
         do! Json.write "dryRun" c.DryRun
+        do! Json.write "iftttKey" c.IftttKey
     }
     static member FromJson (_: Config) = json {
-        let! consumer = Json.read "consumer"
-        let! accessToken = Json.read "accessToken"
         let! stores = Json.read "stores"
         let! dryRun = Json.read "dryRun"
-        return { Consumer = consumer; AccessToken = accessToken; Stores = stores; DryRun = dryRun }
+        let! iftttKey = Json.read "iftttKey"
+        return { Stores = stores; DryRun = dryRun; IftttKey = iftttKey }
     }
 
 let config: Config =
@@ -94,18 +93,15 @@ let config: Config =
         File.ReadAllText(configFilePath)
         |> Json.parse
         |> Json.deserialize
-    match config.AccessToken with
-    | None ->
-        let session = OAuth.Authorize(config.Consumer.Key, config.Consumer.Secret)
-        Debug.WriteLine("Access here: {0}", session.AuthorizeUri)
-        let pincode = Console.ReadLine()
-        let tokens = OAuth.GetTokens(session, pincode)
-        let newConfig = { config with AccessToken = Some { Token = tokens.AccessToken; Secret = tokens.AccessTokenSecret } }
-        newConfig |> Json.serialize |> Json.format |> (fun content -> File.WriteAllText(configFilePath, content))
-        newConfig
-    | _ -> config
+    config
 
 
+type WebDriverPool() =
+    let driver = new ChromeDriver()
+
+    member this.Loan(f: RemoteWebDriver -> 'T): 'T = f driver
+
+let webDriverPool = WebDriverPool()
 
 (*
 let ``オムニセブン`` (driver: FirefoxDriver) =
@@ -201,20 +197,6 @@ let 通販 (driver: FirefoxDriver) (通販strategy: FirefoxDriver -> bool, urlLi
     | e -> Debug.WriteLine(sprintf "Crawling failed: %A" e); None
 *)
 
-let getTwitterTokens () =
-    match config.AccessToken with
-    | Some accessToken -> Tokens.Create(config.Consumer.Key, config.Consumer.Secret, accessToken.Token, accessToken.Secret)
-
-let tweet (o: obj) =
-    let rawStatus = sprintf "%A" o
-    let status = rawStatus.Substring(0, Math.Min(139, rawStatus.Length))
-    Debug.WriteLine("Tweeting: " + status)
-    try
-        let tokens = getTwitterTokens()
-        tokens.Statuses.Update(status) |> ignore
-    with
-    | e -> Debug.WriteLine(sprintf "Tweet failed: %A" e)
-
 type 通販 =
     abstract member Buy: RemoteWebDriver -> unit
 
@@ -293,6 +275,26 @@ type 楽天ブックス(storeInfo: StoreInfo, dryRun: bool) =
                     driver.FindElementByCssSelector("form#login_valid button[name='submit']").Click()
                     if not dryRun then driver.FindElementByCssSelector("button[name='commit_order']").Click()
 
+type MyNintendoStore(storeInfo: StoreInfo) =
+    member this.IsAvailable(driver: RemoteWebDriver) =
+        storeInfo.Urls
+        |> List.exists begin fun url ->
+            driver.Navigate().GoToUrl(url)
+            not (driver.FindElementByCssSelector("p.stock").Text.Contains("SOLD OUT2"))
+        end
+
+let ifttt () =
+    let client = RestClient("https://maker.ifttt.com")
+    let request = RestRequest("trigger/my_nintendo_store/with/key/{key}", Method.GET)
+    request.AddUrlSegment("key", config.IftttKey) |> ignore
+    client.Execute(request) |> ignore
+
+let myNintendoStoreTask =
+    let myNintendoStore = MyNintendoStore(config.Stores.["マイニンテンドーストア"])
+    let run () =
+        if webDriverPool.Loan(myNintendoStore.IsAvailable) then ifttt ()
+    通販Task(run)
+
 let 通販TaskList =
     [
         トイザらス(config.Stores.["トイザらス"], config.DryRun) :> 通販
@@ -308,4 +310,4 @@ let 通販TaskList =
                 driver.Quit()
         通販Task(run)
     end
-    
+
