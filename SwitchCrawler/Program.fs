@@ -1,4 +1,5 @@
-﻿open OpenQA.Selenium.Firefox
+﻿module Program
+
 open System
 open System.Text.RegularExpressions
 open System.Globalization
@@ -7,38 +8,123 @@ open CoreTweet
 open System.Diagnostics
 open System.IO
 
-let ``オムニセブンUrlList`` =
-    [
-        "http://iyec.omni7.jp/detail/4902370537338";
-        "http://iyec.omni7.jp/detail/4902370535709";
-        "http://iyec.omni7.jp/detail/4902370535716";
-        "http://7net.omni7.jp/detail/2110599526";
-        "http://7net.omni7.jp/detail/2110595636";
-        "http://7net.omni7.jp/detail/2110595637";
-    ]
+open Chiron.Mapping
+open Chiron
+open OpenQA.Selenium.Remote
+open OpenQA.Selenium.Chrome
+
+type AccessToken = { Token: string; Secret: string } with
+    static member ToJson (a: AccessToken) = json {
+        do! Json.write "token" a.Token
+        do! Json.write "secret" a.Secret
+    }
+    static member FromJson (_: AccessToken) = json {
+        let! token = Json.read "token"
+        let! secret = Json.read "secret"
+        return { Token = token; Secret = secret }
+    }
+
+type Consumer = { Key: string; Secret: string } with
+    static member ToJson (c: Consumer) = json {
+        do! Json.write "key" c.Key
+        do! Json.write "secret" c.Secret    
+    }
+    static member FromJson (_: Consumer) = json {
+        let! key = Json.read "key"
+        let! secret = Json.read "secret"
+        return { Key = key; Secret = secret }
+    }
+
+type Credential = { Id: string; Password: string } with
+    static member ToJson (c: Credential) = json {
+        do! Json.write "id" c.Id
+        do! Json.write "password" c.Password
+    }
+    static member FromJson (_: Credential) = json {
+        let! id = Json.read "id"
+        let! password = Json.read "password"
+        return { Id = id; Password = password }
+    }
+(*
+type PaymentInfo = {} with
+    static member ToJson (p: PaymentInfo) = json {
+    }
+    static member FromJson (_: PaymentInfo) = json {
+        return {}
+    }
+*)
+
+type StoreInfo = { Credential: Credential; Urls: string list } with
+    static member ToJson (s: StoreInfo) = json {
+        do! Json.write "credential" s.Credential
+        do! Json.write "urls" s.Urls
+    }
+    static member FromJson (_: StoreInfo) = json {
+        let! credential = Json.read "credential"
+        let! urls = Json.read "urls"
+        return { Credential = credential; Urls = urls }
+    }
+
+type Config =
+    {
+        Consumer: Consumer;
+        AccessToken: AccessToken option;
+        Stores: Map<string, StoreInfo>
+        DryRun: bool
+    } with
+    static member ToJson (c: Config) = json {
+        do! Json.write "consumer" c.Consumer
+        do! Json.write "accessToken" c.AccessToken
+        do! Json.write "stores" c.Stores
+        do! Json.write "dryRun" c.DryRun
+    }
+    static member FromJson (_: Config) = json {
+        let! consumer = Json.read "consumer"
+        let! accessToken = Json.read "accessToken"
+        let! stores = Json.read "stores"
+        let! dryRun = Json.read "dryRun"
+        return { Consumer = consumer; AccessToken = accessToken; Stores = stores; DryRun = dryRun }
+    }
+
+let config: Config =
+    let configFilePath =
+        ["../../config.json"; "config.json"]
+        |> List.find File.Exists
+    let config =
+        File.ReadAllText(configFilePath)
+        |> Json.parse
+        |> Json.deserialize
+    match config.AccessToken with
+    | None ->
+        let session = OAuth.Authorize(config.Consumer.Key, config.Consumer.Secret)
+        Debug.WriteLine("Access here: {0}", session.AuthorizeUri)
+        let pincode = Console.ReadLine()
+        let tokens = OAuth.GetTokens(session, pincode)
+        let newConfig = { config with AccessToken = Some { Token = tokens.AccessToken; Secret = tokens.AccessTokenSecret } }
+        newConfig |> Json.serialize |> Json.format |> (fun content -> File.WriteAllText(configFilePath, content))
+        newConfig
+    | _ -> config
+
+
+
+(*
 let ``オムニセブン`` (driver: FirefoxDriver) =
     driver.FindElementByCssSelector("input.js-pressTwice").Enabled
 
-let ``ヨドバシ.comUrlList`` =
-    [
-        "http://www.yodobashi.com/product/100000001003431565/";
-        "http://www.yodobashi.com/product/100000001003431566/";
-        "http://www.yodobashi.com/product/100000001003570628/";
-    ]
+let ``オムニセブン購入`` (driver: FirefoxDriver) (credential: Credential) (dryRun: bool)=
+    driver.FindElementByCssSelector("input.js-pressTwice").Click()
+    driver.FindElementByCssSelector(".js-weightLimitBtn").Click()
+    driver.FindElementByCssSelector("input[name='login']").SendKeys(credential.Id)
+    driver.FindElementByCssSelector("input[name='password']").SendKeys(credential.Password)
+    driver.FindElementByCssSelector("#loginBtn").Click()
+    driver.FindElementByCssSelector("input[name='accptKbn']").Click()
+    driver.FindElementByCssSelector(".js-weightLimitBtn").Click()
+    driver.FindElementByCssSelector("input[name='pay_mthd'][value='02']").Click()
+    driver.FindElementByCssSelector("input.js-pressTwice").Click()
+    //if not dryRun then driver.FindElementByCssSelector("input[name='btnConfirm']").Click()
 
-let ``ヨドバシ.com`` (driver: FirefoxDriver) = 
-    driver.FindElementByCssSelector("#js_buyBoxMain > ul:nth-child(1) > li:nth-child(1) > div:nth-child(1) > p:nth-child(1)").Text <> "予定数の販売を終了しました"        
 
-let ``トイザらスUrlList`` =
-    [
-        "https://www.toysrus.co.jp/s/dsg-580782400";
-        "https://www.toysrus.co.jp/s/dsg-572186500";
-        "https://www.toysrus.co.jp/s/dsg-572182200";
-    ]
-
-let ``トイザらス`` (driver: FirefoxDriver) =
-    driver.FindElementByCssSelector("#isStock_c").GetAttribute("hidden") <> null
-
+    
 let ``ヤマダウェブコムUrlList`` =
     [
         "http://www.yamada-denkiweb.com/1178028018";
@@ -79,11 +165,6 @@ let ``ノジマオンライン`` (driver: FirefoxDriver) =
     not (driver.FindElementByCssSelector(".hassoumeyasu2 > strong:nth-child(1) > strong:nth-child(2) > span:nth-child(1)").Text.Contains("完売御礼"))
 
 let ``楽天ブックスUrlList`` =
-    [
-        "http://ts.books.rakuten.co.jp/rb/14647221/";
-        "http://ts.books.rakuten.co.jp/rb/14647222/";
-        "http://ts.books.rakuten.co.jp/rb/14943334/";
-    ]
 
 let ``楽天ブックス`` (driver: FirefoxDriver) =
     not (driver.FindElementByCssSelector(".status").Text.Contains("ご注文できない商品*"))
@@ -118,74 +199,11 @@ let 通販 (driver: FirefoxDriver) (通販strategy: FirefoxDriver -> bool, urlLi
             end
     with
     | e -> Debug.WriteLine(sprintf "Crawling failed: %A" e); None
-
-let 通販List =
-    [
-        (オムニセブン, オムニセブンUrlList);
-        (``ヨドバシ.com``, ``ヨドバシ.comUrlList``);
-        (トイザらス, トイザらスUrlList);
-        (ヤマダウェブコム, ヤマダウェブコムUrlList);
-        //(``amazon.co.jp``, ``amazon.co.jpUrlList``);
-        //(``amazon.co.jp2``, ``amazon.co.jp2UrlList``);
-        (ノジマオンライン, ノジマオンラインUrlList);
-        (楽天ブックス, 楽天ブックスUrlList);
-        (あみあみ, あみあみUrlList);
-        (TSUTAYA, TSUTAYAUrlList);
-    ]
-
-open FSharp.Data.JsonExtensions
-open Chiron.Mapping
-open Chiron.Functional
-open Chiron
-
-type AccessToken = { Token: string; Secret: string } with
-    static member ToJson (a: AccessToken) = json {
-        do! Json.write "token" a.Token
-        do! Json.write "secret" a.Secret
-    }
-    static member FromJson (_: AccessToken) = json {
-        let! token = Json.read "token"
-        let! secret = Json.read "secret"
-        return { Token = token; Secret = secret }
-    }
-
-type Consumer = { Key: string; Secret: string } with
-    static member ToJson (c: Consumer) = json {
-        do! Json.write "key" c.Key
-        do! Json.write "secret" c.Secret    
-    }
-    static member FromJson (_: Consumer) = json {
-        let! key = Json.read "key"
-        let! secret = Json.read "secret"
-        return { Key = key; Secret = secret }
-    }
-    
-type Config = { Consumer: Consumer; AccessToken: AccessToken option } with
-    static member ToJson (c: Config) = json {
-        do! Json.write "consumer" c.Consumer
-        do! Json.write "accessToken" c.AccessToken
-    }
-    static member FromJson (_: Config) = json {
-        let! consumer = Json.read "consumer"
-        let! accessToken = Json.read "accessToken"
-        return { Consumer = consumer; AccessToken = accessToken }
-    }
+*)
 
 let getTwitterTokens () =
-    let config: Config =
-        File.ReadAllText("../../config.json")
-        |> Json.parse
-        |> Json.deserialize
     match config.AccessToken with
     | Some accessToken -> Tokens.Create(config.Consumer.Key, config.Consumer.Secret, accessToken.Token, accessToken.Secret)
-    | None -> 
-        let session = OAuth.Authorize(config.Consumer.Key, config.Consumer.Secret)
-        Debug.WriteLine("Access here: {0}", session.AuthorizeUri)
-        let pincode = Console.ReadLine()
-        let tokens = OAuth.GetTokens(session, pincode)
-        let newConfig = { config with AccessToken = Some { Token = tokens.AccessToken; Secret = tokens.AccessTokenSecret } }
-        newConfig |> Json.serialize |> Json.format |> (fun content -> File.WriteAllText("../../config.json", content))
-        tokens
 
 let tweet (o: obj) =
     let rawStatus = sprintf "%A" o
@@ -197,27 +215,97 @@ let tweet (o: obj) =
     with
     | e -> Debug.WriteLine(sprintf "Tweet failed: %A" e)
 
-[<EntryPoint>]
-let main argv =
-    use timer =
-        new Threading.Timer(
-            begin fun stateInfo ->
-                use driver = new FirefoxDriver(FirefoxProfile())
-                try
+type 通販 =
+    abstract member Buy: RemoteWebDriver -> unit
+
+type 通販Task(run: unit -> unit) =
+    member this.Run() = run()
+
+type トイザらス(storeInfo: StoreInfo, dryRun: bool) =
+    let isAvailable (driver: RemoteWebDriver) =
+        try
+            driver.FindElementByCssSelector("#isStock_c").GetAttribute("hidden") <> null
+        with
+        | _ -> false
+
+    interface 通販 with
+        member this.Buy(driver) =
+            for url in storeInfo.Urls do
+                driver.Navigate().GoToUrl(url)
+                if isAvailable driver then
                     try
-                        let found =
-                            通販List
-                            |> List.map (通販 driver)
-                            |> List.filter (fun result -> result.IsSome)
-                        if not (List.isEmpty found) then tweet found
+                        Debug.WriteLine("Switch is available. Trying to buy...")
+                        driver.FindElementByCssSelector(".quick-note > a:nth-child(1)").Click()
+                        driver.FindElementByCssSelector("input#mail").SendKeys(storeInfo.Credential.Id)
+                        driver.FindElementByCssSelector("input#pw").SendKeys(storeInfo.Credential.Password)
+                        driver.FindElementByCssSelector(".exbutton").Click()
+                        driver.Navigate().GoToUrl(url)
+                        driver.FindElementByCssSelector("li.quick > button.exbutton").Click()
+                        if not dryRun then driver.FindElementByCssSelector(".exbutton").Click(); Environment.Exit(0)
                     with
-                    | e -> tweet e
-                finally
-                    Debug.WriteLine("Loop completed")
-                    driver.Quit()
-            end,
-            [],
-            0,
-            3 * 60 * 1000
-        )
-    0
+                    | _ -> Debug.WriteLine("Exception occurred.")
+                else
+                    Debug.WriteLine("Switch is NOT available.")
+
+type ヨドバシ(storeInfo: StoreInfo, dryRun: bool) =
+    let isAvailable (driver: RemoteWebDriver) =
+        try
+            driver.FindElementByCssSelector("#js_m_submitRelated") |> ignore
+            true
+        with
+        | _ -> false
+
+    interface 通販 with
+        member this.Buy(driver) =
+            for url in storeInfo.Urls do
+                driver.Navigate().GoToUrl(url)
+                if isAvailable driver then
+                    driver.FindElementByCssSelector("#js_m_submitRelated").Click()
+                    driver.FindElementByCssSelector(".buyButton a[href='/yc/shoppingcart/index.html?next=true']").Click()
+                    driver.FindElementByCssSelector(".checkout a").Click()
+                    driver.FindElementByCssSelector("input#memberId").SendKeys(storeInfo.Credential.Id)
+                    driver.FindElementByCssSelector("input#password").SendKeys(storeInfo.Credential.Password)
+                    driver.FindElementByCssSelector("#js_i_login0").Click()
+                    driver.FindElementByCssSelector("#sc_i_buy").Click()
+                    driver.FindElementByCssSelector("#a04").Click()
+                    driver.FindElementByCssSelector(".js_c_next").Click()
+                    if not dryRun then driver.FindElementByCssSelector("div.buyButton a").Click(); Environment.Exit(0)
+                else
+                    Debug.WriteLine("Switch is NOT available.")
+
+type 楽天ブックス(storeInfo: StoreInfo, dryRun: bool) =
+    let isAvailable (driver: RemoteWebDriver) =
+        try
+            driver.FindElementByCssSelector(".new_addToCart") |> ignore
+            true
+        with
+        | _ -> false
+    
+    interface 通販 with
+        member this.Buy(driver) =
+            for url in storeInfo.Urls do
+                driver.Navigate().GoToUrl(url)
+                if isAvailable driver then
+                    driver.FindElementByCssSelector(".new_addToCart").Click()
+                    driver.FindElementByCssSelector("#js-cartBtn").Click()
+                    driver.FindElementByCssSelector("input[name='u']").SendKeys(storeInfo.Credential.Id)
+                    driver.FindElementByCssSelector("input[name='p']").SendKeys(storeInfo.Credential.Password)
+                    driver.FindElementByCssSelector("form#login_valid button[name='submit']").Click()
+                    if not dryRun then driver.FindElementByCssSelector("button[name='commit_order']").Click()
+
+let 通販TaskList =
+    [
+        トイザらス(config.Stores.["トイザらス"], config.DryRun) :> 通販
+        ヨドバシ(config.Stores.["ヨドバシ.com"], config.DryRun) :> 通販
+        楽天ブックス(config.Stores.["楽天ブックス"], config.DryRun) :> 通販
+    ]
+    |> List.map begin fun 通販 ->
+        let run () =
+            use driver = new ChromeDriver()
+            try
+                通販.Buy(driver)
+            finally
+                driver.Quit()
+        通販Task(run)
+    end
+    
