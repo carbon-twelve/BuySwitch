@@ -8,14 +8,17 @@ open System.Diagnostics
 
 [<EntryPoint>]
 let main argv =
-    use timer =
-        new Threading.Timer(
-            begin fun stateInfo ->
-                myNintendoStoreTask.Run()
-            end,
-            [],
-            0,
-            60 * 1000
-        )
+    let timers =
+        通販TaskList
+        |> List.map begin fun task ->
+            new Threading.Timer(
+                begin fun stateInfo ->
+                    task.Run()
+                end,
+                [],
+                0,
+                60 * 1000
+            )
+        end
     while true do ()
     0

@@ -14,6 +14,7 @@ open OpenQA.Selenium.Remote
 open OpenQA.Selenium.Chrome
 open RestSharp
 open System.Collections.Generic
+open System.Collections.Concurrent
 
 type AccessToken = { Token: string; Secret: string } with
     static member ToJson (a: AccessToken) = json {
@@ -96,12 +97,20 @@ let config: Config =
     config
 
 
-type WebDriverPool() =
-    let driver = new ChromeDriver()
+type WebDriverPool(driverCount: int) =
+    let drivers = new BlockingCollection<RemoteWebDriver>(driverCount)
 
-    member this.Loan(f: RemoteWebDriver -> 'T): 'T = f driver
+    do
+        Seq.init driverCount (fun _ -> new ChromeDriver() :> RemoteWebDriver)
+        |> Seq.iter (fun driver -> drivers.Add(driver))
 
-let webDriverPool = WebDriverPool()
+    member this.Loan(f: RemoteWebDriver -> 'T): 'T =
+        let driver = drivers.Take()
+        let result = f driver
+        drivers.Add(driver)
+        result
+        
+let webDriverPool = WebDriverPool(4)
 
 (*
 let ``オムニセブン`` (driver: FirefoxDriver) =
@@ -197,6 +206,12 @@ let 通販 (driver: FirefoxDriver) (通販strategy: FirefoxDriver -> bool, urlLi
     | e -> Debug.WriteLine(sprintf "Crawling failed: %A" e); None
 *)
 
+let ifttt () =
+    let client = RestClient("https://maker.ifttt.com")
+    let request = RestRequest("trigger/my_nintendo_store/with/key/{key}", Method.GET)
+    request.AddUrlSegment("key", config.IftttKey) |> ignore
+    client.Execute(request) |> ignore
+
 type 通販 =
     abstract member Buy: RemoteWebDriver -> unit
 
@@ -223,7 +238,10 @@ type トイザらス(storeInfo: StoreInfo, dryRun: bool) =
                         driver.FindElementByCssSelector(".exbutton").Click()
                         driver.Navigate().GoToUrl(url)
                         driver.FindElementByCssSelector("li.quick > button.exbutton").Click()
-                        if not dryRun then driver.FindElementByCssSelector(".exbutton").Click(); Environment.Exit(0)
+                        if not dryRun then
+                            driver.FindElementByCssSelector(".exbutton").Click()
+                            ifttt()
+                            Environment.Exit(0)
                     with
                     | _ -> Debug.WriteLine("Exception occurred.")
                 else
@@ -251,7 +269,10 @@ type ヨドバシ(storeInfo: StoreInfo, dryRun: bool) =
                     driver.FindElementByCssSelector("#sc_i_buy").Click()
                     driver.FindElementByCssSelector("#a04").Click()
                     driver.FindElementByCssSelector(".js_c_next").Click()
-                    if not dryRun then driver.FindElementByCssSelector("div.buyButton a").Click(); Environment.Exit(0)
+                    if not dryRun then
+                        driver.FindElementByCssSelector("div.buyButton a").Click()
+                        ifttt()
+                        Environment.Exit(0)
                 else
                     Debug.WriteLine("Switch is NOT available.")
 
@@ -273,7 +294,9 @@ type 楽天ブックス(storeInfo: StoreInfo, dryRun: bool) =
                     driver.FindElementByCssSelector("input[name='u']").SendKeys(storeInfo.Credential.Id)
                     driver.FindElementByCssSelector("input[name='p']").SendKeys(storeInfo.Credential.Password)
                     driver.FindElementByCssSelector("form#login_valid button[name='submit']").Click()
-                    if not dryRun then driver.FindElementByCssSelector("button[name='commit_order']").Click()
+                    if not dryRun then
+                        driver.FindElementByCssSelector("button[name='commit_order']").Click()
+                        ifttt()
 
 type MyNintendoStore(storeInfo: StoreInfo) =
     member this.IsAvailable(driver: RemoteWebDriver) =
@@ -282,12 +305,6 @@ type MyNintendoStore(storeInfo: StoreInfo) =
             driver.Navigate().GoToUrl(url)
             not (driver.FindElementByCssSelector("p.stock").Text.Contains("SOLD OUT2"))
         end
-
-let ifttt () =
-    let client = RestClient("https://maker.ifttt.com")
-    let request = RestRequest("trigger/my_nintendo_store/with/key/{key}", Method.GET)
-    request.AddUrlSegment("key", config.IftttKey) |> ignore
-    client.Execute(request) |> ignore
 
 let myNintendoStoreTask =
     let myNintendoStore = MyNintendoStore(config.Stores.["マイニンテンドーストア"])
@@ -303,11 +320,7 @@ let 通販TaskList =
     ]
     |> List.map begin fun 通販 ->
         let run () =
-            use driver = new ChromeDriver()
-            try
-                通販.Buy(driver)
-            finally
-                driver.Quit()
+            webDriverPool.Loan(通販.Buy)
         通販Task(run)
     end
 
