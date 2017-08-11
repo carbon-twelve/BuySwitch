@@ -17,6 +17,7 @@ NUGET
       System.Runtime.Extensions (>= 4.1) - restriction: && (< net35) (>= netstandard1.1) (< monotouch) (< xamarinios)
       System.Text.RegularExpressions (>= 4.1) - restriction: && (< net35) (>= netstandard1.1) (< monotouch) (< xamarinios)
       System.Threading (>= 4.0.11) - restriction: && (< net35) (>= netstandard1.1) (< monotouch) (< xamarinios)
+    FAKE (4.63)
     FParsec (1.0.2)
     FSharp.Core (4.2.2) - restriction: || (>= net45) (>= netstandard1.6)
       System.Collections (>= 4.0.11) - restriction: >= netstandard1.6
