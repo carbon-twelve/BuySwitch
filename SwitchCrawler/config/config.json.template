@@ -1,0 +1,15 @@
+{
+    "stores": {
+        "STORE NAME": {
+            "credential": {
+                "id": "YOUR ID",
+                "password": "YOUR PASSWORD"
+            },
+            "urls": [
+                "URL OF AN ITEM"
+            ]
+        }
+    },
+    "dryRun": true,
+    "iftttKey": "YOUR IFTTT KEY"
+}

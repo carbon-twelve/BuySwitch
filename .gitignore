@@ -4,6 +4,7 @@
 config.json
 BuySwitch.pem
 .vscode/
+build/
 
 # User-specific files
 *.suo

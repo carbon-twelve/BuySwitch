@@ -5,3 +5,4 @@ Selenium.Firefox.WebDriver
 NUnit
 RestSharp
 NLog.Config
+fake
