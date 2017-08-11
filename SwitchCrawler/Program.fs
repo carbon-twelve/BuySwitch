@@ -15,6 +15,11 @@ open OpenQA.Selenium.Chrome
 open RestSharp
 open System.Collections.Generic
 open System.Collections.Concurrent
+open NLog
+
+LogManager.ThrowExceptions <- true
+let logger = LogManager.GetCurrentClassLogger()
+
 
 type AccessToken = { Token: string; Secret: string } with
     static member ToJson (a: AccessToken) = json {
@@ -88,8 +93,10 @@ type Config =
 
 let config: Config =
     let configFilePath =
-        ["../../config.json"; "config.json"]
+        [ "config.json"; "../../config.json"]
+        |> List.map Path.GetFullPath
         |> List.find File.Exists
+    logger.Info("Using {0} as a config file", configFilePath)
     let config =
         File.ReadAllText(configFilePath)
         |> Json.parse
@@ -112,7 +119,7 @@ type WebDriverPool(driverCount: int) =
         drivers.Add(driver)
         result
         
-let webDriverPool = WebDriverPool(4)
+let webDriverPool = WebDriverPool(3)
 
 (*
 let ``オムニセブン`` (driver: FirefoxDriver) =
@@ -213,6 +220,7 @@ let ifttt () =
     let request = RestRequest("trigger/my_nintendo_store/with/key/{key}", Method.GET)
     request.AddUrlSegment("key", config.IftttKey) |> ignore
     client.Execute(request) |> ignore
+    logger.Info("Sent an event to IFTTT")
 
 type 通販 =
     abstract member Buy: RemoteWebDriver -> unit
@@ -230,10 +238,10 @@ type トイザらス(storeInfo: StoreInfo, dryRun: bool) =
     interface 通販 with
         member this.Buy(driver) =
             for url in storeInfo.Urls do
-                driver.Navigate().GoToUrl(url)
-                if isAvailable driver then
-                    try
-                        Debug.WriteLine("Switch is available. Trying to buy...")
+                try
+                    driver.Navigate().GoToUrl(url)
+                    if isAvailable driver then
+                        logger.Info("Switch is available at トイザらス. Trying to buy...")
                         driver.FindElementByCssSelector(".quick-note > a:nth-child(1)").Click()
                         driver.FindElementByCssSelector("input#mail").SendKeys(storeInfo.Credential.Id)
                         driver.FindElementByCssSelector("input#pw").SendKeys(storeInfo.Credential.Password)
@@ -244,10 +252,11 @@ type トイザらス(storeInfo: StoreInfo, dryRun: bool) =
                             driver.FindElementByCssSelector(".exbutton").Click()
                             ifttt()
                             Environment.Exit(0)
-                    with
-                    | _ -> Debug.WriteLine("Exception occurred.")
-                else
-                    Debug.WriteLine("Switch is NOT available.")
+                    else
+                        logger.Info("Switch is NOT available at トイザらス at this moment.")
+                with
+                | e -> logger.Warn(e, "Exception occurred during トイザらス operation.")
+
 
 type ヨドバシ(storeInfo: StoreInfo, dryRun: bool) =
     let isAvailable (driver: RemoteWebDriver) =
@@ -260,23 +269,28 @@ type ヨドバシ(storeInfo: StoreInfo, dryRun: bool) =
     interface 通販 with
         member this.Buy(driver) =
             for url in storeInfo.Urls do
-                driver.Navigate().GoToUrl(url)
-                if isAvailable driver then
-                    driver.FindElementByCssSelector("#js_m_submitRelated").Click()
-                    driver.FindElementByCssSelector(".buyButton a[href='/yc/shoppingcart/index.html?next=true']").Click()
-                    driver.FindElementByCssSelector(".checkout a").Click()
-                    driver.FindElementByCssSelector("input#memberId").SendKeys(storeInfo.Credential.Id)
-                    driver.FindElementByCssSelector("input#password").SendKeys(storeInfo.Credential.Password)
-                    driver.FindElementByCssSelector("#js_i_login0").Click()
-                    driver.FindElementByCssSelector("#sc_i_buy").Click()
-                    driver.FindElementByCssSelector("#a04").Click()
-                    driver.FindElementByCssSelector(".js_c_next").Click()
-                    if not dryRun then
-                        driver.FindElementByCssSelector("div.buyButton a").Click()
-                        ifttt()
-                        Environment.Exit(0)
-                else
-                    Debug.WriteLine("Switch is NOT available.")
+                try
+                    driver.Navigate().GoToUrl(url)
+                    if isAvailable driver then
+                        logger.Info("Switch is available at ヨドバシ.com. Trying to buy...")
+                        driver.FindElementByCssSelector("#js_m_submitRelated").Click()
+                        driver.FindElementByCssSelector(".buyButton a[href='/yc/shoppingcart/index.html?next=true']").Click()
+                        driver.FindElementByCssSelector(".checkout a").Click()
+                        driver.FindElementByCssSelector("input#memberId").SendKeys(storeInfo.Credential.Id)
+                        driver.FindElementByCssSelector("input#password").SendKeys(storeInfo.Credential.Password)
+                        driver.FindElementByCssSelector("#js_i_login0").Click()
+                        driver.FindElementByCssSelector("#sc_i_buy").Click()
+                        driver.FindElementByCssSelector("#a04").Click()
+                        driver.FindElementByCssSelector(".js_c_next").Click()
+                        if not dryRun then
+                            driver.FindElementByCssSelector("div.buyButton a").Click()
+                            ifttt()
+                            Environment.Exit(0)
+                    else
+                        logger.Info("Switch is NOT available at ヨドバシ.com at this moment.")
+                with
+                | e -> logger.Warn(e, "Exception occurred during ヨドバシ.com operation.")
+
 
 type 楽天ブックス(storeInfo: StoreInfo, dryRun: bool) =
     let isAvailable (driver: RemoteWebDriver) =
@@ -289,16 +303,22 @@ type 楽天ブックス(storeInfo: StoreInfo, dryRun: bool) =
     interface 通販 with
         member this.Buy(driver) =
             for url in storeInfo.Urls do
-                driver.Navigate().GoToUrl(url)
-                if isAvailable driver then
-                    driver.FindElementByCssSelector(".new_addToCart").Click()
-                    driver.FindElementByCssSelector("#js-cartBtn").Click()
-                    driver.FindElementByCssSelector("input[name='u']").SendKeys(storeInfo.Credential.Id)
-                    driver.FindElementByCssSelector("input[name='p']").SendKeys(storeInfo.Credential.Password)
-                    driver.FindElementByCssSelector("form#login_valid button[name='submit']").Click()
-                    if not dryRun then
-                        driver.FindElementByCssSelector("button[name='commit_order']").Click()
-                        ifttt()
+                try
+                    driver.Navigate().GoToUrl(url)
+                    if isAvailable driver then
+                        logger.Info("Switch is available at 楽天ブックス. Trying to buy...")
+                        driver.FindElementByCssSelector(".new_addToCart").Click()
+                        driver.FindElementByCssSelector("#js-cartBtn").Click()
+                        driver.FindElementByCssSelector("input[name='u']").SendKeys(storeInfo.Credential.Id)
+                        driver.FindElementByCssSelector("input[name='p']").SendKeys(storeInfo.Credential.Password)
+                        driver.FindElementByCssSelector("form#login_valid button[name='submit']").Click()
+                        if not dryRun then
+                            driver.FindElementByCssSelector("button[name='commit_order']").Click()
+                            ifttt()
+                    else
+                        logger.Info("Switch is not available at 楽天ブックス at this moment.")
+                with
+                | e -> logger.Warn(e, "Exception occurred during 楽天ブックス operation.")
 
 type MyNintendoStore(storeInfo: StoreInfo) =
     member this.IsAvailable(driver: RemoteWebDriver) =

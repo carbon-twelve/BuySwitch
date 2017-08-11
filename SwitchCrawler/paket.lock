@@ -117,6 +117,11 @@ NUGET
       System.Runtime.Serialization.Formatters (>= 4.3) - restriction: && (< net20) (>= netstandard1.3)
       System.Runtime.Serialization.Primitives (>= 4.3) - restriction: || (&& (< net20) (>= netstandard1.0) (< netstandard1.3)) (&& (< net20) (>= netstandard1.3))
       System.Xml.XmlDocument (>= 4.3) - restriction: && (< net20) (>= netstandard1.3)
+    NLog (4.4.12)
+    NLog.Config (4.4.11)
+      NLog (>= 4.4.11)
+      NLog.Schema (>= 4.4.11)
+    NLog.Schema (4.4.11)
     NUnit (3.7.1)
       NETStandard.Library (>= 1.6) - restriction: || (&& (< net20) (>= netstandard1.3)) (>= netstandard1.6)
       System.Runtime.Loader (>= 4.3) - restriction: >= netstandard1.6
