@@ -108,8 +108,6 @@ type WebDriverPool(driverCount: int) =
     let drivers = new BlockingCollection<RemoteWebDriver>(driverCount)
 
     do
-        let options = ChromeOptions()
-        options.AddArgument("--headless")
         Seq.init driverCount (fun _ -> new ChromeDriver() :> RemoteWebDriver)
         |> Seq.iter (fun driver -> drivers.Add(driver))
 
