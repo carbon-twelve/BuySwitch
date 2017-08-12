@@ -22,13 +22,13 @@ Target "Default" (fun _ ->
 
 Target "Run" (fun _ ->
     if isLinux then
-        ignore(Shell.AsyncExec("Xvfb", ":1"))
-        ignore(Shell.Exec("xhost", "+local:"))
+        ignore(Async.StartAsTask(Shell.AsyncExec("Xvfb", ":1")))
+        ignore(Shell.Exec("xhost", "+local:");)
         ignore(Shell.Exec("mono", buildDir + "SwitchCrawler.exe"))
     else if isWindows then
         ignore(Shell.Exec(buildDir + "SwitchCrawler.exe"))
 )
 
-"Clean" ==> "BuildApp" ==> "Default" ==> "Run"
+"Clean" ==> "BuildApp" ==> "Default"
 
 RunTarget ()
