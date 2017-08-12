@@ -1,8 +1,7 @@
 #r @"packages/FAKE/tools/FakeLib.dll"
 open Fake
-open Fake.MSBuildHelper
-open Fake.EnvironmentHelper
 open System.Diagnostics
+open System.Threading
 
 let buildDir = "./build/"
 
@@ -23,7 +22,8 @@ Target "Default" (fun _ ->
 Target "Run" (fun _ ->
     if isLinux then
         ignore(Async.StartAsTask(Shell.AsyncExec("Xvfb", ":1")))
-        ignore(Shell.Exec("xhost", "+local:");)
+        Thread.Sleep(1000)
+        ignore(Shell.Exec("xhost", "+local:"))
         ignore(Shell.Exec("mono", buildDir + "SwitchCrawler.exe"))
     else if isWindows then
         ignore(Shell.Exec(buildDir + "SwitchCrawler.exe"))
