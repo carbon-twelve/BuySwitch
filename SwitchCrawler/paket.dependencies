@@ -6,5 +6,4 @@ nuget FSharp.Core
 nuget NLog.Config
 nuget NUnit
 nuget RestSharp
-nuget Selenium.Firefox.WebDriver
 nuget Selenium.WebDriver

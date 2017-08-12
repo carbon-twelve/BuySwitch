@@ -2227,5 +2227,4 @@
       </ItemGroup>
     </When>
   </Choose>
-  <Import Project="packages\Selenium.Firefox.WebDriver\build\Selenium.Firefox.WebDriver.targets" Condition="Exists('packages\Selenium.Firefox.WebDriver\build\Selenium.Firefox.WebDriver.targets')" Label="Paket" />
 </Project>
