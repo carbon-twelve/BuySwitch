@@ -20,7 +20,6 @@ open NLog
 LogManager.ThrowExceptions <- true
 let logger = LogManager.GetCurrentClassLogger()
 
-
 type AccessToken = { Token: string; Secret: string } with
     static member ToJson (a: AccessToken) = json {
         do! Json.write "token" a.Token
@@ -108,7 +107,7 @@ type WebDriverPool(driverCount: int) =
     let drivers = new BlockingCollection<RemoteWebDriver>(driverCount)
 
     do
-        Seq.init driverCount (fun _ -> new ChromeDriver() :> RemoteWebDriver)
+        Seq.init driverCount (fun _ -> new ChromeDriver("./drivers") :> RemoteWebDriver)
         |> Seq.iter (fun driver -> drivers.Add(driver))
 
     member this.Loan(f: RemoteWebDriver -> 'T): 'T =
@@ -117,7 +116,7 @@ type WebDriverPool(driverCount: int) =
         drivers.Add(driver)
         result
         
-let webDriverPool = WebDriverPool(3)
+let webDriverPool = WebDriverPool(1)
 
 (*
 let ``オムニセブン`` (driver: FirefoxDriver) =
@@ -135,37 +134,6 @@ let ``オムニセブン購入`` (driver: FirefoxDriver) (credential: Credential
     driver.FindElementByCssSelector("input.js-pressTwice").Click()
     //if not dryRun then driver.FindElementByCssSelector("input[name='btnConfirm']").Click()
 
-
-    
-let ``ヤマダウェブコムUrlList`` =
-    [
-        "http://www.yamada-denkiweb.com/1178028018";
-    ]
-
-let ``ヤマダウェブコム`` (driver: FirefoxDriver) =
-    driver.FindElementByCssSelector(".side_button > button:nth-child(1)").Enabled
-
-let ``amazon.co.jpUrlList`` =
-    [
-        "http://amzn.asia/drmTPI8";
-        "http://amzn.asia/46UEI2w";
-        //"http://amzn.asia/631kePg";
-    ]
-
-let ``amazon.co.jp`` (driver: FirefoxDriver) =
-    try 
-        driver.FindElementByCssSelector("#add-to-cart-button") |> ignore
-        true
-    with
-    | :? NoSuchElementException -> false
-
-let ``amazon.co.jp2UrlList`` =
-    []
-
-let ``amazon.co.jp2`` (driver: FirefoxDriver) =
-    let regexMatch = Regex.Match(driver.FindElementByCssSelector("#priceblock_ourprice").Text, "￥ (.*)")
-    Int32.Parse(regexMatch.Groups.[1].Value, NumberStyles.Any, CultureInfo.GetCultureInfo("ja-JP")) < 49800
-
 let ``ノジマオンラインUrlList`` =
     [
         "https://online.nojima.co.jp/Nintendo-HAC-S-KACEA-%E3%80%90Switch%E3%80%91-%E3%83%8B%E3%83%B3%E3%83%86%E3%83%B3%E3%83%89%E3%83%BC%E3%82%B9%E3%82%A4%E3%83%83%E3%83%81%E6%9C%AC%E4%BD%93-%E3%82%B9%E3%83%97%E3%83%A9%E3%83%88%E3%82%A5%E3%83%BC%E3%83%B32%E3%82%BB%E3%83%83%E3%83%88/4902370537338/1/cd/";
@@ -175,11 +143,6 @@ let ``ノジマオンラインUrlList`` =
 
 let ``ノジマオンライン`` (driver: FirefoxDriver) =
     not (driver.FindElementByCssSelector(".hassoumeyasu2 > strong:nth-child(1) > strong:nth-child(2) > span:nth-child(1)").Text.Contains("完売御礼"))
-
-let ``楽天ブックスUrlList`` =
-
-let ``楽天ブックス`` (driver: FirefoxDriver) =
-    not (driver.FindElementByCssSelector(".status").Text.Contains("ご注文できない商品*"))
 
 let ``あみあみUrlList`` =
     [

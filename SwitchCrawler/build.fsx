@@ -1,9 +1,10 @@
 #r @"packages/FAKE/tools/FakeLib.dll"
 open Fake
+open System.Diagnostics
+open System.Threading
 
 let buildDir = "./build/"
-let configDir = "./config/"
-let driverDir = "./drivers/"
+
 Target "Clean" (fun _ ->
     CleanDir buildDir
 )
@@ -14,21 +15,20 @@ Target "BuildApp" (fun _ ->
     |> Log "AppBuild-Output: "
 )
 
-Target "CopyConfigs" (fun _ ->
-    ["config.json"; "NLog.config"]
-    |> List.map (fun file -> configDir + file)
-    |> Copy buildDir
-)
-
-Target "CopySeleniumDrivers" (fun _ ->
-    !! (driverDir + "*")
-    |> Copy buildDir
-)
-
 Target "Default" (fun _ ->
     trace "Hello World from FAKE"
 )
 
-"Clean" ==> "BuildApp" ==> "CopyConfigs" ==> "CopySeleniumDrivers" ==> "Default"
+Target "Run" (fun _ ->
+    if isLinux then
+        ignore(Async.StartAsTask(Shell.AsyncExec("Xvfb", ":1")))
+        Thread.Sleep(1000)
+        ignore(Shell.Exec("xhost", "+local:"))
+        ignore(Shell.Exec("mono", buildDir + "SwitchCrawler.exe"))
+    else if isWindows then
+        ignore(Shell.Exec(buildDir + "SwitchCrawler.exe"))
+)
 
-RunTargetOrDefault "Default"
+"Clean" ==> "BuildApp" ==> "Default"
+
+RunTarget ()
