@@ -116,7 +116,7 @@ type WebDriverPool(driverCount: int) =
         drivers.Add(driver)
         result
         
-let webDriverPool = WebDriverPool(1)
+let webDriverPool = WebDriverPool(3)
 
 (*
 let ``オムニセブン`` (driver: FirefoxDriver) =
